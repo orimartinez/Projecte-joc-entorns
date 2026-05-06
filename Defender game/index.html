@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="ca">
 
 <head>
     <meta charset="UTF-8">
-    <title>Space Defender: Rogue Legacy - Aggressive</title>
+    <title>Space Defender: Rogue Legacy</title>
     <style>
         body {
             margin: 0;
@@ -21,11 +21,39 @@
             margin: 10px auto;
         }
 
-        #hud {
-            font-size: 18px;
+        #hud,
+        #menu {
             margin-top: 10px;
-            color: #00f0ff;
-            height: 60px;
+            height: 80px;
+        }
+
+        /* Estils del Menú */
+        #main-menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10, 10, 26, 0.95);
+            padding: 30px;
+            border: 2px solid #00f0ff;
+            box-shadow: 0 0 20px #00f0ff;
+            z-index: 10;
+            min-width: 300px;
+        }
+
+        .btn {
+            background: #00f0ff;
+            color: black;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            font-family: 'Courier New';
+        }
+
+        .btn:hover {
+            background: #fff;
         }
 
         .p-bar {
@@ -42,17 +70,56 @@
             background: #0f0;
             transition: width 0.1s;
         }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #records-list {
+            font-size: 14px;
+            color: #aaa;
+            text-align: left;
+            margin: 10px 0;
+        }
+
+        select {
+            background: #111;
+            color: white;
+            border: 1px solid #00f0ff;
+            padding: 5px;
+        }
     </style>
 </head>
 
 <body>
-    <div id="hud">
-        <div id="status">Sistemas Online...</div>
+
+    <div id="main-menu">
+        <h1>SPACE DEFENDER</h1>
+        <p>RECORDS:</p>
+        <div id="records-list"></div>
+
+        <div style="margin: 15px 0;">
+            <label>COLOR DE LA NAU: </label>
+            <select id="shipColor">
+                <option value="#00f0ff">Cian</option>
+                <option value="#ff00ff">Magenta</option>
+                <option value="#00ff00">Llima</option>
+                <option value="#ffff00">Groc</option>
+                <option value="#ffffff">Blanc</option>
+            </select>
+        </div>
+
+        <button class="btn" onclick="startGame()">INICIAR MISSIÓ</button>
+    </div>
+
+    <div id="hud" class="hidden">
+        <div id="status">Sistemes Online...</div>
         <div id="p-label" style="color: yellow; font-size: 14px; margin-top: 4px;"></div>
         <div class="p-bar">
             <div id="p-fill"></div>
         </div>
     </div>
+
     <canvas id="canvas" width="800" height="450"></canvas>
 
     <script>
@@ -63,21 +130,51 @@
         let score = 0, lives = 3, difficulty = 1;
         let bossesKilled = 0, lastBossSpawnScore = 0, lastShot = 0, lastBossShot = 0;
         let keys = {};
+        let gameActive = false;
+        let shipColor = "#00f0ff";
+
+        const POWERS = {
+            DOUBLE: { name: "DOBLE CANYÓ", char: "D", color: "#00f0ff" },
+            SHOTGUN: { name: "SISTEMA ESCOPETA", char: "S", color: "#ffaa00" },
+            BOUNCE: { name: "NÚCLEO REBOT", char: "R", color: "#00ff00" },
+            HEAVY: { name: "MUNICIIÓ PESADA", char: "P", color: "#ff00ff" }
+        };
 
         let activePower = null, powerTimer = 0;
-        const POWERS = {
-            DOUBLE: { name: "DOBLE CAÑÓN", char: "D", color: "#00f0ff" },
-            SHOTGUN: { name: "SISTEMA ESCOPETA", char: "S", color: "#ffaa00" },
-            BOUNCE: { name: "NÚCLEO REBOTE", char: "R", color: "#00ff00" },
-            HEAVY: { name: "MUNICIÓN PESADA", char: "P", color: "#ff00ff" }
-        };
+
+        // Inicialització d'estrelles i planetes per al fons (sempre actiu)
+        stars = Array.from({ length: 100 }, () => ({ x: Math.random() * 800, y: Math.random() * 450, s: 0.5 + Math.random() }));
+        planets = Array.from({ length: 3 }, (_, i) => ({ x: 100 + (i * 300), y: Math.random() * 450, r: 15 + Math.random() * 30, s: 0.05, c: `hsla(${Math.random() * 360}, 40%, 30%, 0.3)` }));
+
+        function startGame() {
+            shipColor = document.getElementById("shipColor").value;
+            document.getElementById("main-menu").classList.add("hidden");
+            document.getElementById("hud").classList.remove("hidden");
+            reset();
+            gameActive = true;
+        }
 
         function reset() {
             ship = { x: 100, y: 225, speed: 5.5 };
             bullets = []; enemyBullets = []; enemies = []; asteroids = []; items = [];
             boss = null; score = 0; lives = 3; difficulty = 1; bossesKilled = 0; lastBossSpawnScore = 0;
-            stars = Array.from({ length: 100 }, () => ({ x: Math.random() * 800, y: Math.random() * 450, s: 0.5 + Math.random() }));
-            planets = Array.from({ length: 3 }, (_, i) => ({ x: 100 + (i * 300), y: Math.random() * 450, r: 15 + Math.random() * 30, s: 0.05, c: `hsla(${Math.random() * 360}, 40%, 30%, 0.3)` }));
+            activePower = null; powerTimer = 0;
+        }
+
+        function updateRecords() {
+            const records = JSON.parse(localStorage.getItem("space_records") || "[]");
+            const list = document.getElementById("records-list");
+            list.innerHTML = records.length ? "" : "No hi ha dades.";
+            records.sort((a, b) => b - a).slice(0, 5).forEach((r, i) => {
+                list.innerHTML += `<div>${i + 1}. ${r} punts</div>`;
+            });
+        }
+
+        function saveScore(s) {
+            let records = JSON.parse(localStorage.getItem("space_records") || "[]");
+            records.push(s);
+            records.sort((a, b) => b - a);
+            localStorage.setItem("space_records", JSON.stringify(records.slice(0, 5)));
         }
 
         window.addEventListener("keydown", e => keys[e.key] = true);
@@ -85,7 +182,7 @@
 
         function drawShip(x, y) {
             ctx.save(); ctx.translate(x, y);
-            ctx.fillStyle = "#00f0ff"; ctx.fillRect(-25, -5, 10, 10);
+            ctx.fillStyle = shipColor; ctx.fillRect(-25, -5, 10, 10);
             ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(-15, -12); ctx.lineTo(-15, 12); ctx.fill();
             ctx.restore();
         }
@@ -100,7 +197,6 @@
             let delay = activePower === 'HEAVY' ? 400 : 150;
             if (now - lastShot < delay) return;
             lastShot = now;
-
             if (activePower === 'DOUBLE') {
                 bullets.push({ x: ship.x, y: ship.y - 10, vx: 11, vy: 0, dmg: 1 }, { x: ship.x, y: ship.y + 10, vx: 11, vy: 0, dmg: 1 });
             } else if (activePower === 'SHOTGUN') {
@@ -117,9 +213,16 @@
         function loop() {
             ctx.clearRect(0, 0, 800, 450);
 
+            // Fons (sempre corre)
             planets.forEach(p => { p.x -= p.s; if (p.x + 50 < 0) p.x = 850; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fillStyle = p.c; ctx.fill(); });
             ctx.fillStyle = "white"; stars.forEach(s => { s.x -= s.s; if (s.x < 0) s.x = 800; ctx.fillRect(s.x, s.y, 1, 1); });
 
+            if (!gameActive) {
+                requestAnimationFrame(loop);
+                return;
+            }
+
+            // Lògica del joc activa
             if (activePower) {
                 powerTimer -= 16.6;
                 document.getElementById("p-fill").style.width = (powerTimer / 10000 * 100) + "%";
@@ -133,13 +236,13 @@
             drawShip(ship.x, ship.y);
             if (keys[" "]) fire();
 
+            // Balas, Asteroides, Enemics (Codi original adaptat)
             for (let i = bullets.length - 1; i >= 0; i--) {
                 let b = bullets[i]; b.x += b.vx; b.y += b.vy;
                 if (b.bnc && (b.y < 0 || b.y > 450)) b.vy *= -1;
-                ctx.fillStyle = b.col || "#00f0ff";
+                ctx.fillStyle = b.col || shipColor;
                 ctx.fillRect(b.x, b.y, b.sz || 8, b.sz / 3 || 2);
                 if (b.x > 850 || b.x < -100 || (b.life && --b.life < 0)) { bullets.splice(i, 1); continue; }
-
                 asteroids.forEach((a, ai) => {
                     if (Math.hypot(b.x - a.x, b.y - a.y) < a.r) {
                         a.hp -= b.dmg; if (!b.bnc) b.x = 2000;
@@ -167,32 +270,19 @@
             }
 
             for (let i = enemyBullets.length - 1; i >= 0; i--) {
-                let eb = enemyBullets[i]; eb.x -= (5 + difficulty * 0.6); // Balas un poco más rápidas
+                let eb = enemyBullets[i]; eb.x -= (5 + difficulty * 0.6);
                 ctx.fillStyle = "#ffcc00"; ctx.fillRect(eb.x, eb.y, 8, 4);
                 if (Math.hypot(ship.x - eb.x, ship.y - eb.y) < 15) { lives--; enemyBullets.splice(i, 1); if (lives <= 0) return gameOver(); }
                 else if (eb.x < -10) enemyBullets.splice(i, 1);
             }
 
-            // Enemigos Normales
             if (!boss && Math.random() < 0.018 + (difficulty * 0.006)) {
-                enemies.push({
-                    x: 800, y: Math.random() * 400, sz: 25,
-                    spd: 1.6 + (difficulty * 0.45),
-                    canShoot: Math.random() < (0.2 + difficulty * 0.05), // Más enemigos disparan
-                    lastShot: Date.now() - Math.random() * 1000, // Disparo inicial aleatorio
-                    hp: 1
-                });
+                enemies.push({ x: 800, y: Math.random() * 400, sz: 25, spd: 1.6 + (difficulty * 0.45), canShoot: Math.random() < (0.2 + difficulty * 0.05), lastShot: Date.now() - Math.random() * 1000, hp: 1 });
             }
 
             for (let i = enemies.length - 1; i >= 0; i--) {
                 let e = enemies[i]; e.x -= e.spd; drawEnemy(e.x, e.y, e.sz);
-
-                // IA de disparo más rápida (1.2 segundos entre ráfagas)
-                if (e.canShoot && e.x > 150 && Date.now() - e.lastShot > 1200) {
-                    enemyBullets.push({ x: e.x, y: e.y + e.sz / 2 });
-                    e.lastShot = Date.now();
-                }
-
+                if (e.canShoot && e.x > 150 && Date.now() - e.lastShot > 1200) { enemyBullets.push({ x: e.x, y: e.y + e.sz / 2 }); e.lastShot = Date.now(); }
                 bullets.forEach(b => { if (b.x > e.x && b.x < e.x + e.sz && b.y > e.y && b.y < e.y + e.sz) { e.hp = 0; if (!b.bnc) b.x = 2000; } });
                 if (e.hp <= 0) { score++; enemies.splice(i, 1); }
                 else if (e.x < -30) enemies.splice(i, 1);
@@ -208,35 +298,34 @@
                 if (boss.x > 600) boss.x -= 1;
                 boss.y += boss.dir * (1.6 + difficulty * 0.25);
                 if (boss.y <= 10 || boss.y >= 330) boss.dir *= -1;
-
                 ctx.fillStyle = boss.hit > 0 ? "white" : "#aa00ff"; if (boss.hit > 0) boss.hit--;
                 ctx.fillRect(boss.x + 20, boss.y + 10, boss.sz - 40, boss.sz - 20); ctx.fillRect(boss.x, boss.y, 15, boss.sz); ctx.fillRect(boss.x + boss.sz - 15, boss.y, 15, boss.sz);
-
-                if (Date.now() - lastBossShot > boss.shotDelay) {
-                    enemyBullets.push({ x: boss.x, y: boss.y + 20 }, { x: boss.x, y: boss.y + 55 }, { x: boss.x, y: boss.y + 90 });
-                    lastBossShot = Date.now();
-                }
-
+                if (Date.now() - lastBossShot > boss.shotDelay) { enemyBullets.push({ x: boss.x, y: boss.y + 20 }, { x: boss.x, y: boss.y + 55 }, { x: boss.x, y: boss.y + 90 }); lastBossShot = Date.now(); }
                 ctx.fillStyle = "red"; ctx.fillRect(200, 10, (boss.life / boss.max) * 400, 8);
-
                 for (let j = bullets.length - 1; j >= 0; j--) {
                     let b = bullets[j];
                     if (b.x > boss.x && b.x < boss.x + boss.sz && b.y > boss.y && b.y < boss.y + boss.sz) {
                         boss.life -= b.dmg; boss.hit = 2; if (!b.bnc) bullets.splice(j, 1);
-                        if (boss.life <= 0) {
-                            boss = null; score += 5; bossesKilled++; difficulty += 0.5;
-                            break;
-                        }
+                        if (boss.life <= 0) { boss = null; score += 5; bossesKilled++; difficulty += 0.5; break; }
                     }
                 }
             }
 
-            document.getElementById("status").innerText = `SCORE: ${score} | ❤️: ${lives} | SECTOR: ${Math.floor(difficulty)}`;
+            document.getElementById("status").innerText = `PUNTUACIÓ: ${score} | ❤️: ${lives} | SECTOR: ${Math.floor(difficulty)}`;
             requestAnimationFrame(loop);
         }
 
-        function gameOver() { alert("FIN DE LA MISIÓN\nSectores: " + bossesKilled + "\nScore: " + score); location.reload(); }
-        reset(); loop();
+        function gameOver() {
+            gameActive = false;
+            saveScore(score);
+            alert("FI DE LA MISSIÓ\nSectors: " + bossesKilled + "\nPunts: " + score);
+            document.getElementById("main-menu").classList.remove("hidden");
+            document.getElementById("hud").classList.add("hidden");
+            updateRecords();
+        }
+
+        updateRecords();
+        loop();
     </script>
 </body>
 
